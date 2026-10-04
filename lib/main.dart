@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
-import 'dashboard.dart';
+import 'auth.dart';
 import 'expense.dart';
+import 'home_shell.dart';
+import 'login_screen.dart';
 
 void main() async {
   // Needed before using SharedPreferences
   WidgetsFlutterBinding.ensureInitialized();
-  await loadExpenses();
+  await loadSession();
+  if (currentUser != null) {
+    await loadExpenses();
+  }
   runApp(const MyApp());
 }
 
@@ -14,21 +19,20 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Spendly',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: accentColor),
-        scaffoldBackgroundColor: const Color(0xFFF5F6F8),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFF5F6F8),
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          centerTitle: true,
-        ),
-      ),
-      home: const Dashboard(),
+    // Rebuild the app when dark mode is switched on or off
+    return ValueListenableBuilder<bool>(
+      valueListenable: darkMode,
+      builder: (context, isDark, _) {
+        return MaterialApp(
+          title: 'Spendly',
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(Brightness.light),
+          darkTheme: buildTheme(Brightness.dark),
+          themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
+          // Skip the login screen if the user is still logged in
+          home: currentUser == null ? const LoginScreen() : const HomeShell(),
+        );
+      },
     );
   }
 }

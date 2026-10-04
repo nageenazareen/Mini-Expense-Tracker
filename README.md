@@ -1,44 +1,57 @@
 # Spendly – Expense Tracker
 
-Spendly is a small Flutter app to record and track daily spending.
+Spendly is a Flutter app to record, understand and control daily spending.
+It has accounts, a dashboard, charts, search and filters, and dark mode.
 
-## Features
+## Screens
 
-### Required
-- Add expenses (title, amount, category, date)
-- View all expenses in a list
-- Calculate total spending
-- Form validation
-- Navigation between Dashboard, Add Expense and Expense List
+| Screen | What it does |
+|---|---|
+| **Login / Sign up** | Create an account or log in. Stays logged in until you log out |
+| **Home** | Greeting, money spent this month vs last month, this month by category, monthly totals, recent expenses |
+| **Expenses** | Full list grouped by day (Today, Yesterday, …), search, category and month filters, filtered total, swipe to delete with Undo |
+| **Stats** | Month switcher, total / per-day / top category / biggest expense, donut chart by category, bar chart of the last 6 months |
+| **Profile** | Name and email, dark mode switch, delete all expenses, log out |
+| **Add / Edit Expense** | Title, amount, date, category, optional note. Edit screen has a Delete button with confirmation |
 
-### Bonus
-- **Categories:** Food, Transport, Shopping, Bills, Other (each with its own icon)
-- **Delete expense:** swipe left, with an Undo option
-- **Edit expense:** tap any expense to change it
-- **Search & filter:** search by title and filter by category
-- **Local persistence:** expenses stay saved after closing or refreshing the app
-- **Better UI/UX:** spending-by-category breakdown, empty states, centered layout on web
+## Task Checklist
+
+### Day 1
+- Add expenses (title, amount, category, date), list, total, form validation, navigation
 
 ### Day 2 – Full CRUD
-- **Add, Edit, Delete, List** of expenses with category and date
-- **Delete from the edit screen** with a "Delete expense?" confirmation (swipe-to-delete with Undo still works in the list)
-- **Total calculation:** overall total, filtered total, and per-category totals
-- **Stronger form validation:**
+- **Add, Edit, Delete, List** of expenses with **category** and **date**
+- **Delete** from the edit screen (with a "Delete expense?" dialog) or by swiping left in the list (with Undo)
+- **Total calculation:** this month, last month, all time, per category, and the total of the current filter
+- **Form validation:**
   - Title is required, 2–40 characters
-  - Amount must be a plain number (`500` or `99.50`), more than 0, at most Rs. 10,000,000 and at most 2 decimal places. Text like `-5`, `abc`, `1e5` is rejected
-  - Date and category are required; future dates cannot be picked
-- **Decimals kept:** `99.50` now shows as `Rs. 99.50` and stays `99.50` when editing (before it was rounded to 100)
+  - Amount must be a plain number (`500` or `99.50`), more than 0, at most Rs. 10,000,000 and at most 2 decimal places. `-5`, `abc`, `1e5` are rejected
+  - Category is required; the date cannot be in the future
+- **Local storage:** `shared_preferences`
 
-### Day 3 – Improvements
-- **Monthly total:** "This Month" and "Last Month" on the dashboard, plus a **Monthly Totals** list of the last 6 months. Tap a month to open its expenses
-- **Search/filter:** search by title *or* category, filter by category **and by month**, and a "Clear filters" button when nothing matches
-- **Category-wise expenses:** spending-by-category bars on the dashboard
-- **Local persistence:** `shared_preferences`
-- **Empty states:** for no expenses and for no search results
+### Day 3 – Improvements (all 7 done)
+- **Search/filter:** search by title, category or note; filter by category and by month; "Clear filters"
+- **Category-wise expenses:** colored category bars on Home and a donut chart on Stats
+- **Monthly total:** this month vs last month (with % change), monthly totals list, 6-month bar chart
+- **Local persistence:** every user's expenses are saved on the device under their own key
+- **Better UI/UX:** bottom navigation, gradient cards, colored categories, charts, dark mode, list grouped by day
+- **Empty state:** on Home, Expenses (no expenses / no matches) and Stats (no data in a month)
 - **Error handling:**
-  - A broken saved entry is skipped instead of crashing the app, and the user is told how many were skipped
-  - If saving to the device fails, a red error message is shown
-- **Tests:** 9 unit and widget tests (`flutter test`) for totals, formatting, save/load, broken data, validation, edit and delete
+  - A broken saved entry is skipped instead of crashing the app, and the user is told
+  - If saving fails, a red error message is shown
+  - Login shows clear errors (wrong password, email already used) and a loading spinner
+
+### Extra
+- **Login & Sign up** with name, email and password
+  - Passwords are **never saved as plain text**: a random salt + SHA-256 hash is stored
+  - Same error for wrong email or wrong password, so emails cannot be guessed
+  - Each account only sees its own expenses
+  - Expenses saved by the Day 1 version are moved to the first account that logs in, so nothing is lost
+- **Dark mode**, remembered after closing the app
+- **16 automated tests** (`flutter test`)
+
+> Note: accounts are stored on this device only (no server). The task's Advanced
+> part (Supabase) is the next step to store accounts and expenses online.
 
 ## Flutter/Dart Version
 
@@ -46,9 +59,11 @@ Spendly is a small Flutter app to record and track daily spending.
 
 Check yours with `flutter --version`.
 
-## Package Used
+## Packages Used
 
-- `shared_preferences` – the official Flutter package for saving small data on the device. Used only for local persistence.
+- `shared_preferences` – saves accounts, expenses and settings on the device
+- `fl_chart` – donut and bar charts on the Stats screen
+- `crypto` – SHA-256 hashing for passwords
 
 ## How to Run
 
@@ -67,13 +82,20 @@ flutter test
 
 ```text
 lib/
-  main.dart          -> starts the app, loads saved expenses, sets the theme
-  expense.dart       -> Expense class, the expenses list, save/load,
-                        and small helpers (total, Rs. format, date format,
-                        category icon, ExpenseTile)
-  dashboard.dart     -> total spent, spending by category, recent expenses
-  add_expense.dart   -> form to add a new expense or edit an existing one
-  expense_list.dart  -> all expenses with search, filter, edit and delete
+  main.dart            -> starts the app, restores the login, light/dark theme
+  theme.dart           -> colors, category colors, gradient, light & dark themes
+  auth.dart            -> sign up, log in, log out, password hashing, dark mode setting
+  expense.dart         -> Expense class, save/load per user, totals,
+                          formatting helpers, ExpenseTile, EmptyState
+  login_screen.dart    -> login and sign up form
+  home_shell.dart      -> bottom navigation with the 4 tabs
+  dashboard.dart       -> Home tab
+  expense_list.dart    -> Expenses tab (search, filters, grouped list)
+  stats_screen.dart    -> Stats tab (charts)
+  profile_screen.dart  -> Profile tab
+  add_expense.dart     -> add / edit / delete one expense
+test/
+  widget_test.dart     -> 16 unit and widget tests
 ```
 
 ## What I Learned
@@ -81,23 +103,26 @@ lib/
 - How StatefulWidget works and how setState updates the UI
 - How forms and validation work with Form, GlobalKey and TextFormField
 - How to make a custom form field (category chips) using FormField
-- How navigation works with Navigator.push and Navigator.pop
-- How ListView and ListView.builder display data from a list
-- How to calculate totals from a list with a simple for loop
+- How navigation works with Navigator.push, pop and pushReplacement
+- How to build a bottom navigation bar with NavigationBar
 - How to save data with shared_preferences by converting objects to JSON
-- How to reuse one screen for both adding and editing
+- How to store passwords safely with a salt and a hash
+- How to draw charts with fl_chart
+- How to support light and dark themes with ThemeData
+- How to write unit and widget tests
 
 ## Problems Faced
 
 - **Passing data between screens:** I kept one `expenses` list in `expense.dart` and imported it in every screen.
-- **Updating the total after adding an expense:** The dashboard did not update when I came back. I fixed it with `await Navigator.push(...)` and then `setState()`.
-- **Form validation:** The amount field accepted text and negative numbers. I used `double.tryParse` and checked that the amount is more than 0.
-- **Handling the date picker:** The date was not part of the form, so I used a read-only TextFormField that opens the date picker on tap.
-- **Saving data:** SharedPreferences cannot store objects directly, so I converted each expense to a Map and then to a JSON string.
+- **Updating the total after adding an expense:** I used `await Navigator.push(...)` and then `setState()`.
+- **Form validation:** The amount field accepted text and negative numbers. Now a regular expression only allows numbers like `500` or `99.50`.
+- **Decimals were lost:** `99.50` showed as `Rs. 100`. I changed `formatAmount` to keep 2 decimals.
+- **App crash on bad saved data:** One broken entry crashed the app on start. Now it is skipped with try/catch.
+- **Overflow on small screens:** A Row on the login screen went off-screen in a test, so I changed it to a Wrap.
+- **Keeping each user's data separate:** Every user's expenses are saved under `expenses_<email>`.
 
 ## Future Improvements
 
-- Charts
-- Firebase/Supabase database
+- Supabase database and online login (the task's Advanced part)
+- Monthly budget with alerts
 - Export expenses to PDF or CSV
-- Dark mode

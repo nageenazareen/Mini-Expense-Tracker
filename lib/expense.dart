@@ -1,24 +1,34 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'auth.dart';
+import 'theme.dart';
 
-// Main colors used in the whole app
-const Color accentColor = Color(0xFF0F766E);
-const Color lightAccent = Color(0xFFE6F4F1);
+export 'theme.dart';
 
-List<String> categories = ['Food', 'Transport', 'Shopping', 'Bills', 'Other'];
+List<String> categories = [
+  'Food',
+  'Transport',
+  'Shopping',
+  'Bills',
+  'Health',
+  'Entertainment',
+  'Other',
+];
 
 class Expense {
   String title;
   double amount;
   String category;
   DateTime date;
+  String note;
 
   Expense({
     required this.title,
     required this.amount,
     required this.category,
     required this.date,
+    this.note = '',
   });
 
   // Convert to a Map so we can save it as text
@@ -28,6 +38,7 @@ class Expense {
       'amount': amount,
       'category': category,
       'date': date.toIso8601String(),
+      'note': note,
     };
   }
 
@@ -38,15 +49,22 @@ class Expense {
       amount: (map['amount'] as num).toDouble(),
       category: map['category'],
       date: DateTime.parse(map['date']),
+      note: map['note'] ?? '',
     );
   }
 }
 
-// All expenses are kept in this list
+// All expenses of the logged in user are kept in this list
 List<Expense> expenses = [];
 
-// How many saved expenses could not be read (shown as a warning on start)
+// How many saved expenses could not be read (shown as a warning)
 int skippedExpenses = 0;
+
+// Every user has their own saved list
+String storageKey() {
+  if (currentUser == null) return 'expenses';
+  return 'expenses_${currentUser!.email}';
+}
 
 // Save the list on the device.
 // Returns false if saving failed, so the screen can show an error.
@@ -57,22 +75,33 @@ Future<bool> saveExpenses() async {
     for (Expense expense in expenses) {
       data.add(jsonEncode(expense.toMap()));
     }
-    return await prefs.setStringList('expenses', data);
+    return await prefs.setStringList(storageKey(), data);
   } catch (error) {
     debugPrint('Could not save expenses: $error');
     return false;
   }
 }
 
-// Load the saved list when the app starts.
+// Load the saved list of the logged in user.
 // A broken entry is skipped instead of crashing the whole app.
 Future<void> loadExpenses() async {
   expenses = [];
   skippedExpenses = 0;
   try {
     final prefs = await SharedPreferences.getInstance();
-    List<String> data = prefs.getStringList('expenses') ?? [];
-    for (String item in data) {
+    List<String>? data = prefs.getStringList(storageKey());
+
+    // Day 1 saved everything under "expenses". Give those old
+    // expenses to the first user who logs in, so nothing is lost.
+    if (data == null && currentUser != null) {
+      data = prefs.getStringList('expenses');
+      if (data != null) {
+        await prefs.setStringList(storageKey(), data);
+        await prefs.remove('expenses');
+      }
+    }
+
+    for (String item in data ?? []) {
       try {
         expenses.add(Expense.fromMap(jsonDecode(item)));
       } catch (error) {
@@ -90,6 +119,17 @@ double getTotal() {
   double total = 0;
   for (Expense expense in expenses) {
     total = total + expense.amount;
+  }
+  return total;
+}
+
+double categoryTotal(String category, {DateTime? month}) {
+  double total = 0;
+  for (Expense expense in expenses) {
+    bool inMonth = month == null || isSameMonth(expense.date, month);
+    if (expense.category == category && inMonth) {
+      total = total + expense.amount;
+    }
   }
   return total;
 }
@@ -122,22 +162,14 @@ List<DateTime> expenseMonths() {
   return months;
 }
 
-double categoryTotal(String category) {
-  double total = 0;
-  for (Expense expense in expenses) {
-    if (expense.category == category) {
-      total = total + expense.amount;
-    }
-  }
-  return total;
-}
-
 IconData categoryIcon(String category) {
-  if (category == 'Food') return Icons.restaurant;
-  if (category == 'Transport') return Icons.directions_car;
-  if (category == 'Shopping') return Icons.shopping_bag;
-  if (category == 'Bills') return Icons.receipt_long;
-  return Icons.category;
+  if (category == 'Food') return Icons.restaurant_rounded;
+  if (category == 'Transport') return Icons.directions_car_rounded;
+  if (category == 'Shopping') return Icons.shopping_bag_rounded;
+  if (category == 'Bills') return Icons.receipt_long_rounded;
+  if (category == 'Health') return Icons.favorite_rounded;
+  if (category == 'Entertainment') return Icons.movie_rounded;
+  return Icons.category_rounded;
 }
 
 // Turns 12500 into "Rs. 12,500" and 99.5 into "Rs. 99.50"
@@ -159,8 +191,18 @@ String formatAmount(double amount) {
 }
 
 const List<String> monthNames = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec'
 ];
 
 // Turns a date into "5 Mar 2026"
@@ -173,7 +215,29 @@ String formatMonth(DateTime date) {
   return '${monthNames[date.month - 1]} ${date.year}';
 }
 
-// One expense row, used on the dashboard and the list screen
+// Colored rounded icon for a category
+class CategoryIcon extends StatelessWidget {
+  final String category;
+  final double size;
+
+  const CategoryIcon({super.key, required this.category, this.size = 44});
+
+  @override
+  Widget build(BuildContext context) {
+    Color color = categoryColor(category);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(size * 0.3),
+      ),
+      child: Icon(categoryIcon(category), color: color, size: size * 0.5),
+    );
+  }
+}
+
+// One expense row, used on the home screen and the list screen
 class ExpenseTile extends StatelessWidget {
   final Expense expense;
   final VoidCallback? onTap;
@@ -182,51 +246,94 @@ class ExpenseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                CategoryIcon(category: expense.category),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        expense.title,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${expense.category} • ${formatDate(expense.date)}',
+                        style:
+                            const TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '- ${formatAmount(expense.amount)}',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFDC2626),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: lightAccent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(categoryIcon(expense.category), color: accentColor),
+      ),
+    );
+  }
+}
+
+// Shown when a list has nothing in it
+class EmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final Widget? action;
+
+  const EmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.action,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    expense.title,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${expense.category} • ${formatDate(expense.date)}',
-                    style: const TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              formatAmount(expense.amount),
+            child: Icon(icon, size: 40, color: accentColor),
+          ),
+          const SizedBox(height: 16),
+          Text(title,
               style:
-                  const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
+                  const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text(message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey)),
+          if (action != null) ...[const SizedBox(height: 12), action!],
+        ],
       ),
     );
   }

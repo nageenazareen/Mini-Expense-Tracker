@@ -17,6 +17,7 @@ class _AddExpenseState extends State<AddExpense> {
   final titleController = TextEditingController();
   final amountController = TextEditingController();
   final dateController = TextEditingController();
+  final noteController = TextEditingController();
 
   String? selectedCategory;
   DateTime? selectedDate;
@@ -36,8 +37,13 @@ class _AddExpenseState extends State<AddExpense> {
           : expense.amount.toStringAsFixed(2);
       selectedCategory = expense.category;
       selectedDate = expense.date;
-      dateController.text = formatDate(expense.date);
+      noteController.text = expense.note;
+    } else {
+      // Most expenses are from today, so start with today's date
+      DateTime now = DateTime.now();
+      selectedDate = DateTime(now.year, now.month, now.day);
     }
+    dateController.text = formatDate(selectedDate!);
   }
 
   @override
@@ -45,6 +51,7 @@ class _AddExpenseState extends State<AddExpense> {
     titleController.dispose();
     amountController.dispose();
     dateController.dispose();
+    noteController.dispose();
     super.dispose();
   }
 
@@ -74,18 +81,21 @@ class _AddExpenseState extends State<AddExpense> {
 
     String title = titleController.text.trim();
     double amount = double.parse(amountController.text.trim());
+    String note = noteController.text.trim();
 
     if (isEditing) {
       widget.expense!.title = title;
       widget.expense!.amount = amount;
       widget.expense!.category = selectedCategory!;
       widget.expense!.date = selectedDate!;
+      widget.expense!.note = note;
     } else {
       expenses.add(Expense(
         title: title,
         amount: amount,
         category: selectedCategory!,
         date: selectedDate!,
+        note: note,
       ));
     }
 
@@ -132,17 +142,11 @@ class _AddExpenseState extends State<AddExpense> {
     Navigator.pop(context);
   }
 
-  // Same look for every text field
+  // Same look for every text field (colors come from the app theme)
   InputDecoration fieldStyle(String label, IconData icon) {
     return InputDecoration(
       labelText: label,
       prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide.none,
-      ),
     );
   }
 
@@ -160,137 +164,142 @@ class _AddExpenseState extends State<AddExpense> {
             ),
         ],
       ),
-      body: Center(
+      // Top-aligned so the form starts right under the app bar
+      body: Align(
+        alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
           child: Form(
             key: formKey,
-            child: ListView(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              children: [
-                TextFormField(
-                  controller: titleController,
-                  textCapitalization: TextCapitalization.sentences,
-                  maxLength: 40,
-                  decoration: fieldStyle('Title', Icons.edit),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter a title';
-                    }
-                    if (value.trim().length < 2) {
-                      return 'Title must be at least 2 characters';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: amountController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: fieldStyle('Amount (Rs.)', Icons.payments),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter an amount';
-                    }
-                    // Only digits, with at most 2 digits after the dot.
-                    // This also blocks "-5", "1e5", "NaN" and "Infinity".
-                    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(value.trim())) {
-                      return 'Enter a number like 500 or 99.50';
-                    }
-                    double amount = double.parse(value.trim());
-                    if (amount <= 0) {
-                      return 'Amount must be more than 0';
-                    }
-                    if (amount > 10000000) {
-                      return 'Amount cannot be more than Rs. 10,000,000';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  controller: dateController,
-                  readOnly: true,
-                  onTap: pickDate,
-                  decoration: fieldStyle('Date', Icons.calendar_today),
-                  validator: (value) {
-                    if (selectedDate == null) {
-                      return 'Please select a date';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
+                    controller: titleController,
+                    textCapitalization: TextCapitalization.sentences,
+                    maxLength: 40,
+                    decoration: fieldStyle('Title', Icons.edit),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter a title';
+                      }
+                      if (value.trim().length < 2) {
+                        return 'Title must be at least 2 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: amountController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: fieldStyle('Amount (Rs.)', Icons.payments),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter an amount';
+                      }
+                      // Only digits, with at most 2 digits after the dot.
+                      // This also blocks "-5", "1e5", "NaN" and "Infinity".
+                      if (!RegExp(r'^\d+(\.\d{1,2})?$')
+                          .hasMatch(value.trim())) {
+                        return 'Enter a number like 500 or 99.50';
+                      }
+                      double amount = double.parse(value.trim());
+                      if (amount <= 0) {
+                        return 'Amount must be more than 0';
+                      }
+                      if (amount > 10000000) {
+                        return 'Amount cannot be more than Rs. 10,000,000';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: dateController,
+                    readOnly: true,
+                    onTap: pickDate,
+                    decoration: fieldStyle('Date', Icons.calendar_today),
+                    validator: (value) {
+                      if (selectedDate == null) {
+                        return 'Please select a date';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 20),
 
-                // Category chips with validation
-                FormField<String>(
-                  initialValue: selectedCategory,
-                  validator: (value) {
-                    if (selectedCategory == null) {
-                      return 'Please select a category';
-                    }
-                    return null;
-                  },
-                  builder: (field) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Category',
-                            style: TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: categories.map((category) {
-                            return ChoiceChip(
-                              avatar: Icon(categoryIcon(category), size: 18),
-                              label: Text(category),
-                              showCheckmark: false,
-                              selected: selectedCategory == category,
-                              selectedColor: lightAccent,
-                              onSelected: (selected) {
-                                setState(() {
-                                  selectedCategory = category;
-                                });
-                                field.didChange(category);
-                              },
-                            );
-                          }).toList(),
-                        ),
-                        if (field.hasError)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8, left: 4),
-                            child: Text(
-                              field.errorText!,
+                  // Category chips with validation
+                  FormField<String>(
+                    initialValue: selectedCategory,
+                    validator: (value) {
+                      if (selectedCategory == null) {
+                        return 'Please select a category';
+                      }
+                      return null;
+                    },
+                    builder: (field) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Category',
                               style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                                fontSize: 12,
+                                  fontSize: 15, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: categories.map((category) {
+                              return ChoiceChip(
+                                avatar: Icon(categoryIcon(category),
+                                    size: 18, color: categoryColor(category)),
+                                label: Text(category),
+                                showCheckmark: false,
+                                selected: selectedCategory == category,
+                                onSelected: (selected) {
+                                  setState(() {
+                                    selectedCategory = category;
+                                  });
+                                  field.didChange(category);
+                                },
+                              );
+                            }).toList(),
+                          ),
+                          if (field.hasError)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8, left: 4),
+                              child: Text(
+                                field.errorText!,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: saveExpense,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: accentColor,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: Text(isEditing ? 'Update Expense' : 'Save Expense',
-                        style: const TextStyle(fontSize: 16)),
+                        ],
+                      );
+                    },
                   ),
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: noteController,
+                    maxLength: 120,
+                    maxLines: 2,
+                    minLines: 1,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: fieldStyle('Note (optional)', Icons.notes),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: saveExpense,
+                    icon: Icon(isEditing ? Icons.check_rounded : Icons.add),
+                    label: Text(isEditing ? 'Update Expense' : 'Save Expense'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
