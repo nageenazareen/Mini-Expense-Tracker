@@ -3,7 +3,10 @@ import 'expense.dart';
 import 'add_expense.dart';
 
 class ExpenseList extends StatefulWidget {
-  const ExpenseList({super.key});
+  // If given, the list opens filtered to this month
+  final DateTime? initialMonth;
+
+  const ExpenseList({super.key, this.initialMonth});
 
   @override
   State<ExpenseList> createState() => _ExpenseListState();
@@ -12,18 +15,35 @@ class ExpenseList extends StatefulWidget {
 class _ExpenseListState extends State<ExpenseList> {
   String searchText = '';
   String selectedFilter = 'All';
+  DateTime? selectedMonth; // null means all months
+  final searchController = TextEditingController();
 
-  void deleteExpense(Expense expense) {
+  @override
+  void initState() {
+    super.initState();
+    selectedMonth = widget.initialMonth;
+  }
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  void deleteExpense(Expense expense) async {
     int index = expenses.indexOf(expense);
     setState(() {
       expenses.remove(expense);
     });
-    saveExpenses();
+    bool saved = await saveExpenses();
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${expense.title} deleted'),
+        content: Text(saved
+            ? '${expense.title} deleted'
+            : '${expense.title} deleted, but it could not be saved on this device'),
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () {
@@ -46,21 +66,35 @@ class _ExpenseListState extends State<ExpenseList> {
 
   @override
   Widget build(BuildContext context) {
-    // Apply search and category filter
+    // Apply search, category and month filters
     List<Expense> filtered = [];
     double filteredTotal = 0;
+    String search = searchText.trim().toLowerCase();
     for (Expense expense in expenses) {
-      bool matchSearch =
-          expense.title.toLowerCase().contains(searchText.toLowerCase());
+      bool matchSearch = expense.title.toLowerCase().contains(search) ||
+          expense.category.toLowerCase().contains(search);
       bool matchCategory =
           selectedFilter == 'All' || expense.category == selectedFilter;
-      if (matchSearch && matchCategory) {
+      bool matchMonth =
+          selectedMonth == null || isSameMonth(expense.date, selectedMonth!);
+      if (matchSearch && matchCategory && matchMonth) {
         filtered.add(expense);
         filteredTotal = filteredTotal + expense.amount;
       }
     }
 
     List<String> filters = ['All', ...categories];
+    List<DateTime> months = expenseMonths();
+    // The chosen month may have no expenses left after a delete
+    if (selectedMonth != null && !months.contains(selectedMonth)) {
+      months.insert(0, selectedMonth!);
+    }
+
+    String totalLabel = 'Total';
+    if (selectedFilter != 'All') totalLabel = '$totalLabel ($selectedFilter)';
+    if (selectedMonth != null) {
+      totalLabel = '$totalLabel - ${formatMonth(selectedMonth!)}';
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('All Expenses')),
@@ -84,13 +118,14 @@ class _ExpenseListState extends State<ExpenseList> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                       child: TextField(
+                        controller: searchController,
                         onChanged: (value) {
                           setState(() {
                             searchText = value;
                           });
                         },
                         decoration: InputDecoration(
-                          hintText: 'Search expenses',
+                          hintText: 'Search by title or category',
                           prefixIcon: const Icon(Icons.search),
                           filled: true,
                           fillColor: Colors.white,
@@ -126,6 +161,42 @@ class _ExpenseListState extends State<ExpenseList> {
                       ),
                     ),
 
+                    // Month filter
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DropdownButtonFormField<DateTime?>(
+                        // New key when the month changes from outside
+                        // (e.g. "Clear filters"), so the dropdown updates
+                        key: ValueKey(selectedMonth),
+                        initialValue: selectedMonth,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.calendar_month),
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                        items: [
+                          const DropdownMenuItem<DateTime?>(
+                            value: null,
+                            child: Text('All months'),
+                          ),
+                          for (DateTime month in months)
+                            DropdownMenuItem<DateTime?>(
+                              value: month,
+                              child: Text(formatMonth(month)),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            selectedMonth = value;
+                          });
+                        },
+                      ),
+                    ),
+
                     // Total of the shown expenses
                     Container(
                       margin: const EdgeInsets.all(16),
@@ -137,11 +208,11 @@ class _ExpenseListState extends State<ExpenseList> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            selectedFilter == 'All'
-                                ? 'Total'
-                                : 'Total ($selectedFilter)',
-                            style: const TextStyle(fontSize: 16),
+                          Flexible(
+                            child: Text(
+                              totalLabel,
+                              style: const TextStyle(fontSize: 16),
+                            ),
                           ),
                           Text(
                             formatAmount(filteredTotal),
@@ -160,9 +231,28 @@ class _ExpenseListState extends State<ExpenseList> {
 
                     Expanded(
                       child: filtered.isEmpty
-                          ? const Center(
-                              child: Text('No expenses match your search.',
-                                  style: TextStyle(color: Colors.grey)),
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.search_off,
+                                      size: 48, color: Colors.grey),
+                                  const SizedBox(height: 8),
+                                  const Text('No expenses match your filters.',
+                                      style: TextStyle(color: Colors.grey)),
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        searchText = '';
+                                        selectedFilter = 'All';
+                                        selectedMonth = null;
+                                      });
+                                      searchController.clear();
+                                    },
+                                    child: const Text('Clear filters'),
+                                  ),
+                                ],
+                              ),
                             )
                           : ListView.builder(
                               padding:

@@ -11,6 +11,25 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
+  // Small label + amount used inside the total card
+  Widget monthStat(String label, double amount) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white70)),
+        const SizedBox(height: 4),
+        Text(
+          formatAmount(amount),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
   void openAddExpense() async {
     await Navigator.push(
       context,
@@ -28,17 +47,39 @@ class _DashboardState extends State<Dashboard> {
     setState(() {});
   }
 
-  void openExpenseList() async {
+  void openExpenseList({DateTime? month}) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const ExpenseList()),
+      MaterialPageRoute(builder: (context) => ExpenseList(initialMonth: month)),
     );
     setState(() {});
   }
 
   @override
+  void initState() {
+    super.initState();
+    // Tell the user if some saved data could not be read
+    if (skippedExpenses > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(skippedExpenses == 1
+                ? '1 saved expense could not be loaded and was skipped.'
+                : '$skippedExpenses saved expenses could not be loaded and were skipped.'),
+          ),
+        );
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     double total = getTotal();
+    DateTime now = DateTime.now();
+    double thisMonth = monthTotal(now);
+    double lastMonth = monthTotal(DateTime(now.year, now.month - 1));
+    // Show at most 6 months in the monthly section
+    List<DateTime> months = expenseMonths().take(6).toList();
     // Show only the 5 newest expenses here
     List<Expense> recent = expenses.take(5).toList();
 
@@ -87,9 +128,52 @@ class _DashboardState extends State<Dashboard> {
                           : '${expenses.length} expenses added',
                       style: const TextStyle(color: Colors.white70),
                     ),
+                    const Divider(color: Colors.white24, height: 28),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: monthStat('This Month', thisMonth),
+                        ),
+                        Expanded(
+                          child: monthStat('Last Month', lastMonth),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
+
+              // Monthly totals
+              if (months.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const Text('Monthly Totals',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      for (DateTime month in months)
+                        ListTile(
+                          leading: const Icon(Icons.calendar_month,
+                              color: accentColor),
+                          title: Text(formatMonth(month)),
+                          trailing: Text(
+                            formatAmount(monthTotal(month)),
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w600),
+                          ),
+                          // Open the list already filtered to this month
+                          onTap: () => openExpenseList(month: month),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
 
               // Spending by category
               if (total > 0) ...[

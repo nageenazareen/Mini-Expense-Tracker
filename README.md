@@ -19,10 +19,30 @@ Spendly is a small Flutter app to record and track daily spending.
 - **Local persistence:** expenses stay saved after closing or refreshing the app
 - **Better UI/UX:** spending-by-category breakdown, empty states, centered layout on web
 
+### Day 2 – Full CRUD
+- **Add, Edit, Delete, List** of expenses with category and date
+- **Delete from the edit screen** with a "Delete expense?" confirmation (swipe-to-delete with Undo still works in the list)
+- **Total calculation:** overall total, filtered total, and per-category totals
+- **Stronger form validation:**
+  - Title is required, 2–40 characters
+  - Amount must be a plain number (`500` or `99.50`), more than 0, at most Rs. 10,000,000 and at most 2 decimal places. Text like `-5`, `abc`, `1e5` is rejected
+  - Date and category are required; future dates cannot be picked
+- **Decimals kept:** `99.50` now shows as `Rs. 99.50` and stays `99.50` when editing (before it was rounded to 100)
+
+### Day 3 – Improvements
+- **Monthly total:** "This Month" and "Last Month" on the dashboard, plus a **Monthly Totals** list of the last 6 months. Tap a month to open its expenses
+- **Search/filter:** search by title *or* category, filter by category **and by month**, and a "Clear filters" button when nothing matches
+- **Category-wise expenses:** spending-by-category bars on the dashboard
+- **Local persistence:** `shared_preferences`
+- **Empty states:** for no expenses and for no search results
+- **Error handling:**
+  - A broken saved entry is skipped instead of crashing the app, and the user is told how many were skipped
+  - If saving to the device fails, a red error message is shown
+- **Tests:** 9 unit and widget tests (`flutter test`) for totals, formatting, save/load, broken data, validation, edit and delete
+
 ## Flutter/Dart Version
 
-- Flutter 3.35 (stable channel)
-- Dart 3.9
+- Tested with Flutter 3.44 (stable channel) and Dart 3.12 (works on Flutter 3.35+ / Dart 3.9+)
 
 Check yours with `flutter --version`.
 
@@ -35,6 +55,12 @@ Check yours with `flutter --version`.
 ```bash
 flutter pub get
 flutter run
+```
+
+Run the tests:
+
+```bash
+flutter test
 ```
 
 ## Project Structure
@@ -71,7 +97,6 @@ lib/
 
 ## Future Improvements
 
-- Monthly reports
 - Charts
 - Firebase/Supabase database
 - Export expenses to PDF or CSV

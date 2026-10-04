@@ -45,24 +45,45 @@ class Expense {
 // All expenses are kept in this list
 List<Expense> expenses = [];
 
-// Save the list on the device
-Future<void> saveExpenses() async {
-  final prefs = await SharedPreferences.getInstance();
-  List<String> data = [];
-  for (Expense expense in expenses) {
-    data.add(jsonEncode(expense.toMap()));
+// How many saved expenses could not be read (shown as a warning on start)
+int skippedExpenses = 0;
+
+// Save the list on the device.
+// Returns false if saving failed, so the screen can show an error.
+Future<bool> saveExpenses() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> data = [];
+    for (Expense expense in expenses) {
+      data.add(jsonEncode(expense.toMap()));
+    }
+    return await prefs.setStringList('expenses', data);
+  } catch (error) {
+    debugPrint('Could not save expenses: $error');
+    return false;
   }
-  await prefs.setStringList('expenses', data);
 }
 
-// Load the saved list when the app starts
+// Load the saved list when the app starts.
+// A broken entry is skipped instead of crashing the whole app.
 Future<void> loadExpenses() async {
-  final prefs = await SharedPreferences.getInstance();
-  List<String> data = prefs.getStringList('expenses') ?? [];
   expenses = [];
-  for (String item in data) {
-    expenses.add(Expense.fromMap(jsonDecode(item)));
+  skippedExpenses = 0;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> data = prefs.getStringList('expenses') ?? [];
+    for (String item in data) {
+      try {
+        expenses.add(Expense.fromMap(jsonDecode(item)));
+      } catch (error) {
+        skippedExpenses++;
+        debugPrint('Skipped a broken expense: $error');
+      }
+    }
+  } catch (error) {
+    debugPrint('Could not load expenses: $error');
   }
+  expenses.sort((a, b) => b.date.compareTo(a.date));
 }
 
 double getTotal() {
@@ -71,6 +92,34 @@ double getTotal() {
     total = total + expense.amount;
   }
   return total;
+}
+
+// Total of one month, e.g. monthTotal(DateTime(2026, 10))
+double monthTotal(DateTime month) {
+  double total = 0;
+  for (Expense expense in expenses) {
+    if (isSameMonth(expense.date, month)) {
+      total = total + expense.amount;
+    }
+  }
+  return total;
+}
+
+bool isSameMonth(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month;
+}
+
+// All months that have at least one expense, newest first
+List<DateTime> expenseMonths() {
+  List<DateTime> months = [];
+  for (Expense expense in expenses) {
+    DateTime month = DateTime(expense.date.year, expense.date.month);
+    if (!months.contains(month)) {
+      months.add(month);
+    }
+  }
+  months.sort((a, b) => b.compareTo(a));
+  return months;
 }
 
 double categoryTotal(String category) {
@@ -91,9 +140,11 @@ IconData categoryIcon(String category) {
   return Icons.category;
 }
 
-// Turns 12500 into "Rs. 12,500"
+// Turns 12500 into "Rs. 12,500" and 99.5 into "Rs. 99.50"
 String formatAmount(double amount) {
-  String number = amount.toStringAsFixed(0);
+  String fixed = amount.toStringAsFixed(2);
+  String number = fixed.substring(0, fixed.length - 3);
+  String decimals = fixed.substring(fixed.length - 3);
   String result = '';
   int count = 0;
   for (int i = number.length - 1; i >= 0; i--) {
@@ -103,16 +154,23 @@ String formatAmount(double amount) {
       result = ',$result';
     }
   }
-  return 'Rs. $result';
+  if (decimals == '.00') decimals = '';
+  return 'Rs. $result$decimals';
 }
+
+const List<String> monthNames = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
 
 // Turns a date into "5 Mar 2026"
 String formatDate(DateTime date) {
-  List<String> months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ];
-  return '${date.day} ${months[date.month - 1]} ${date.year}';
+  return '${date.day} ${monthNames[date.month - 1]} ${date.year}';
+}
+
+// Turns a date into "Mar 2026"
+String formatMonth(DateTime date) {
+  return '${monthNames[date.month - 1]} ${date.year}';
 }
 
 // One expense row, used on the dashboard and the list screen

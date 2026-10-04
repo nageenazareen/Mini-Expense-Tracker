@@ -30,7 +30,10 @@ class _AddExpenseState extends State<AddExpense> {
     if (widget.expense != null) {
       Expense expense = widget.expense!;
       titleController.text = expense.title;
-      amountController.text = expense.amount.toStringAsFixed(0);
+      // Keep decimals like 99.50 instead of rounding them away
+      amountController.text = expense.amount == expense.amount.roundToDouble()
+          ? expense.amount.toStringAsFixed(0)
+          : expense.amount.toStringAsFixed(2);
       selectedCategory = expense.category;
       selectedDate = expense.date;
       dateController.text = formatDate(expense.date);
@@ -60,7 +63,13 @@ class _AddExpenseState extends State<AddExpense> {
     }
   }
 
-  void saveExpense() {
+  void showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  void saveExpense() async {
     if (!formKey.currentState!.validate()) return;
 
     String title = titleController.text.trim();
@@ -82,7 +91,44 @@ class _AddExpenseState extends State<AddExpense> {
 
     // Keep newest expenses at the top, then save
     expenses.sort((a, b) => b.date.compareTo(a.date));
-    saveExpenses();
+    bool saved = await saveExpenses();
+    if (!mounted) return;
+    if (!saved) {
+      showError('Could not save on this device. Please try again.');
+    }
+    Navigator.pop(context);
+  }
+
+  // Ask before deleting, because this cannot be undone from here
+  void confirmDelete() async {
+    bool? yes = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete expense?'),
+          content: Text('"${widget.expense!.title}" will be removed.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+    if (yes != true) return;
+
+    expenses.remove(widget.expense);
+    bool saved = await saveExpenses();
+    if (!mounted) return;
+    if (!saved) {
+      showError('Could not save on this device. Please try again.');
+    }
     Navigator.pop(context);
   }
 
@@ -103,7 +149,17 @@ class _AddExpenseState extends State<AddExpense> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(isEditing ? 'Edit Expense' : 'Add Expense')),
+      appBar: AppBar(
+        title: Text(isEditing ? 'Edit Expense' : 'Add Expense'),
+        actions: [
+          if (isEditing)
+            IconButton(
+              tooltip: 'Delete',
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              onPressed: confirmDelete,
+            ),
+        ],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
@@ -115,10 +171,14 @@ class _AddExpenseState extends State<AddExpense> {
                 TextFormField(
                   controller: titleController,
                   textCapitalization: TextCapitalization.sentences,
+                  maxLength: 40,
                   decoration: fieldStyle('Title', Icons.edit),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter a title';
+                    }
+                    if (value.trim().length < 2) {
+                      return 'Title must be at least 2 characters';
                     }
                     return null;
                   },
@@ -133,12 +193,17 @@ class _AddExpenseState extends State<AddExpense> {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter an amount';
                     }
-                    double? amount = double.tryParse(value.trim());
-                    if (amount == null) {
-                      return 'Please enter a valid number';
+                    // Only digits, with at most 2 digits after the dot.
+                    // This also blocks "-5", "1e5", "NaN" and "Infinity".
+                    if (!RegExp(r'^\d+(\.\d{1,2})?$').hasMatch(value.trim())) {
+                      return 'Enter a number like 500 or 99.50';
                     }
+                    double amount = double.parse(value.trim());
                     if (amount <= 0) {
                       return 'Amount must be more than 0';
+                    }
+                    if (amount > 10000000) {
+                      return 'Amount cannot be more than Rs. 10,000,000';
                     }
                     return null;
                   },
